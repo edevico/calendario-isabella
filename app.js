@@ -232,8 +232,8 @@
         photoURL(withPhoto.photos[0].t).then((u) => { b.style.backgroundImage = `url("${u}")`; }).catch(() => {});
       }
       b.addEventListener('click', () => {
-        if (state.selected === ds) { openEditor(null, ds); return; } // segundo toque = agregar
-        state.selected = ds; renderMonth();
+        if (state.selected === ds && state.dayTapped) { openEditor(null, ds); return; } // segundo toque = agregar
+        state.selected = ds; state.dayTapped = true; renderMonth();
       });
       grid.appendChild(b);
     }
@@ -272,17 +272,21 @@
     return card;
   }
 
+  // Día tocado: se muestra arriba de la lista del mes (solo si se tocó un día)
   function renderDay() {
     const panel = $('#dayPanel'); panel.innerHTML = '';
+    renderMonthList();
+    if (!state.dayTapped) return;
     const ds = state.selected;
     const head = document.createElement('div'); head.className = 'day-head';
     const ld = longDate(ds);
-    head.textContent = ds === todayStr() ? 'Hoy, ' + ld : ld.charAt(0).toUpperCase() + ld.slice(1);
+    head.innerHTML = `<span>${esc(ds === todayStr() ? 'Hoy, ' + ld : ld.charAt(0).toUpperCase() + ld.slice(1))}</span><button type="button" class="day-close" aria-label="Cerrar día">✕</button>`;
+    head.querySelector('.day-close').addEventListener('click', () => { state.dayTapped = false; renderMonth(); });
     panel.appendChild(head);
     const evs = eventsOn(ds);
     if (!evs.length) {
-      const empty = document.createElement('div'); empty.className = 'empty-day';
-      empty.innerHTML = `Nada anotado este día.<br><button type="button" class="btn primary">＋ Agregar algo</button>`;
+      const empty = document.createElement('div'); empty.className = 'empty-day small';
+      empty.innerHTML = `Nada anotado este día. <button type="button" class="link-btn">＋ Agregar</button>`;
       empty.querySelector('button').addEventListener('click', () => openEditor(null, ds));
       panel.appendChild(empty);
     } else evs.forEach((e) => panel.appendChild(eventCard(e, ds)));
@@ -307,31 +311,62 @@
         cells += `<span class="${evs.length ? 'ev' : ''}${ds === today ? ' td' : ''}"${col ? ` style="background:${col}"` : ''}>${d}</span>`;
       }
       box.innerHTML = `<h3>${MONTHS[m]}</h3><div class="mini-grid">${cells}</div><div class="mini-count">${count ? `${count} evento${count > 1 ? 's' : ''}` : '&nbsp;'}</div>`;
-      box.addEventListener('click', () => { state.year = y; state.month = m; state.selected = `${y}-${pad(m + 1)}-01`; if (y === now.getFullYear() && m === now.getMonth()) state.selected = todayStr(); setView('mes'); });
+      box.addEventListener('click', () => { state.year = y; state.month = m; state.selected = `${y}-${pad(m + 1)}-01`; state.dayTapped = false; if (y === now.getFullYear() && m === now.getMonth()) state.selected = todayStr(); setView('mes'); });
       wrap.appendChild(box);
     }
   }
 
-  function renderList() {
-    const today = todayStr();
+  // Todas las ocurrencias de los eventos (los anuales, en los años alrededor de "year")
+  function allOccurrences(year) {
     const occ = [];
-    const horizon = new Date(); horizon.setFullYear(horizon.getFullYear() + 1);
-    const thisYear = new Date().getFullYear();
     state.events.forEach((e) => {
       const len = daysBetween(e.date, lastDay(e));
       if (e.yearly) {
-        [thisYear - 1, thisYear, thisYear + 1].forEach((yy) => {
+        [year - 1, year, year + 1].forEach((yy) => {
           const ds = ymd(parseDate(`${yy}${e.date.slice(4)}`));
           if (ds >= e.date) occ.push({ e, ds, end: addDays(ds, len) });
         });
         occ.push({ e, ds: e.date, end: addDays(e.date, len), origin: true });
       } else occ.push({ e, ds: e.date, end: lastDay(e) });
     });
-    const upSeen = new Set();
-    const up = occ.filter((o) => !o.origin && o.end >= today && o.ds <= ymd(horizon))
+    return occ;
+  }
+  // Ocurrencias que tocan el rango [from, to], ordenadas y sin repetir
+  function occurrencesIn(from, to, year) {
+    const seen = new Set();
+    return allOccurrences(year)
+      .filter((o) => !o.origin && o.end >= from && o.ds <= to)
       .sort((a, b) => a.ds.localeCompare(b.ds) || sortEv(a.e, b.e))
-      .filter((o) => { const k = o.e.id + o.ds; if (upSeen.has(k)) return false; upSeen.add(k); return true; })
-      .slice(0, 30);
+      .filter((o) => { const k = o.e.id + o.ds; if (seen.has(k)) return false; seen.add(k); return true; });
+  }
+
+  function renderMonthList() {
+    const wrap = $('#monthList'); wrap.innerHTML = '';
+    const { year: y, month: m } = state;
+    const first = `${y}-${pad(m + 1)}-01`;
+    const last = `${y}-${pad(m + 1)}-${pad(new Date(y, m + 1, 0).getDate())}`;
+    const today = todayStr();
+    const isPast = last < today;
+    const from = !isPast && first <= today ? today : first;
+    const items = occurrencesIn(from, last, y);
+    const head = document.createElement('h2'); head.className = 'section-title';
+    head.textContent = isPast ? `Lo que pasó en ${MONTHS[m]}` : `Lo que viene en ${MONTHS[m]}`;
+    wrap.appendChild(head);
+    if (!items.length) {
+      const empty = document.createElement('div'); empty.className = 'empty-day';
+      empty.textContent = isPast ? 'No hubo nada anotado este mes.' : 'No hay nada más anotado este mes.';
+      wrap.appendChild(empty);
+      return;
+    }
+    items.forEach((o) => wrap.appendChild(eventCard(o.e, o.ds, true)));
+  }
+
+  function renderList() {
+    const today = todayStr();
+    const horizon = new Date(); horizon.setFullYear(horizon.getFullYear() + 1);
+    const thisYear = new Date().getFullYear();
+    const occ = allOccurrences(thisYear);
+    const up = occurrencesIn(today, ymd(horizon), thisYear).slice(0, 30);
     const seen = new Set();
     const past = occ.filter((o) => o.end < today && (!o.e.yearly || o.origin))
       .sort((a, b) => b.ds.localeCompare(a.ds) || (b.e.updatedAt || '').localeCompare(a.e.updatedAt || ''))
@@ -597,13 +632,13 @@
       if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; }
       state.month = m; state.year = y;
       const t = todayStr();
-      state.selected = (t.slice(0, 7) === `${y}-${pad(m + 1)}`) ? t : `${y}-${pad(m + 1)}-01`;
+      state.selected = (t.slice(0, 7) === `${y}-${pad(m + 1)}`) ? t : `${y}-${pad(m + 1)}-01`; state.dayTapped = false;
       renderMonth();
     };
     $('#prevMonth').addEventListener('click', () => moveMonth(-1));
     $('#nextMonth').addEventListener('click', () => moveMonth(1));
     $('#monthTitle').addEventListener('click', () => { state.yearView = state.year; setView('ano'); });
-    $('#todayBtn').addEventListener('click', () => { const d = new Date(); state.year = d.getFullYear(); state.month = d.getMonth(); state.selected = todayStr(); renderMonth(); });
+    $('#todayBtn').addEventListener('click', () => { const d = new Date(); state.year = d.getFullYear(); state.month = d.getMonth(); state.selected = todayStr(); state.dayTapped = false; renderMonth(); });
     $('#prevYear').addEventListener('click', () => { state.yearView--; renderYear(); });
     $('#nextYear').addEventListener('click', () => { state.yearView++; renderYear(); });
 
