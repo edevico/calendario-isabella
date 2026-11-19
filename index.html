@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Calendario de Isabella</title>
+  <meta name="theme-color" content="#e8737f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Isabella">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="img/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ===== Pantalla de entrada ===== -->
+  <section id="login" class="login" hidden>
+    <div class="login-card">
+      <div class="login-photos">
+        <img src="img/isabella-2.jpg" alt="" class="login-photo small">
+        <img src="img/isabella-1.jpg" alt="Isabella" class="login-photo">
+      </div>
+      <h1>Calendario de <span class="child-name">Isabella</span></h1>
+      <p class="muted">¿Quién eres?</p>
+      <div id="userPick" class="user-pick"></div>
+      <label class="field">
+        <span>Código secreto de la familia</span>
+        <input id="codeInput" type="password" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="Ej: K7P2M9QX">
+      </label>
+      <button id="loginBtn" class="btn primary big" type="button">Entrar</button>
+      <p id="loginMsg" class="login-msg" role="alert"></p>
+      <p id="demoNote" class="demo-note" hidden>Modo demostración: lo que anotes queda solo en este dispositivo. Cualquier código sirve.</p>
+    </div>
+  </section>
+
+  <!-- ===== App ===== -->
+  <div id="app" class="app" hidden>
+    <header class="topbar">
+      <img src="img/isabella-1.jpg" alt="" class="avatar">
+      <div class="topbar-text">
+        <div class="topbar-title"><span class="child-name">Isabella</span></div>
+        <div id="whoami" class="topbar-sub"></div>
+      </div>
+      <button id="refreshBtn" class="icon-btn" type="button" aria-label="Actualizar">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
+      </button>
+      <button id="menuBtn" class="icon-btn" type="button" aria-label="Opciones">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="5" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="19" r="2" fill="currentColor"/></svg>
+      </button>
+    </header>
+    <div id="demoBanner" class="demo-banner" hidden>Modo demostración — los datos quedan solo en este dispositivo</div>
+
+    <main>
+      <!-- Vista Mes -->
+      <section id="view-mes" class="view">
+        <div class="nav-row">
+          <button class="icon-btn" id="prevMonth" type="button" aria-label="Mes anterior">‹</button>
+          <button id="monthTitle" class="month-title" type="button"></button>
+          <button class="icon-btn" id="nextMonth" type="button" aria-label="Mes siguiente">›</button>
+        </div>
+        <div class="dow"></div>
+        <div id="grid" class="grid"></div>
+        <button id="todayBtn" class="chip-btn" type="button">Hoy</button>
+        <div id="dayPanel" class="day-panel"></div>
+      </section>
+
+      <!-- Vista Año -->
+      <section id="view-ano" class="view" hidden>
+        <div class="nav-row">
+          <button class="icon-btn" id="prevYear" type="button" aria-label="Año anterior">‹</button>
+          <div id="yearTitle" class="month-title"></div>
+          <button class="icon-btn" id="nextYear" type="button" aria-label="Año siguiente">›</button>
+        </div>
+        <div id="yearGrid" class="year-grid"></div>
+      </section>
+
+      <!-- Vista Lista -->
+      <section id="view-lista" class="view" hidden>
+        <h2 class="section-title">Próximos</h2>
+        <div id="upcoming"></div>
+        <h2 class="section-title">Recientes</h2>
+        <div id="recent"></div>
+      </section>
+
+      <!-- Vista Recuerdos -->
+      <section id="view-fotos" class="view" hidden>
+        <h2 class="section-title">Recuerdos con fotos</h2>
+        <div id="gallery" class="gallery"></div>
+      </section>
+    </main>
+
+    <button id="fab" class="fab" type="button" aria-label="Agregar evento">
+      <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path stroke="currentColor" stroke-width="2.6" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+    </button>
+
+    <nav class="tabbar">
+      <button data-view="mes" class="tab active" type="button"><span class="tab-ico">📅</span>Mes</button>
+      <button data-view="ano" class="tab" type="button"><span class="tab-ico">🗓️</span>Año</button>
+      <button data-view="lista" class="tab" type="button"><span class="tab-ico">📝</span>Lista</button>
+      <button data-view="fotos" class="tab" type="button"><span class="tab-ico">📸</span>Recuerdos</button>
+    </nav>
+  </div>
+
+  <!-- ===== Editor de evento (hoja inferior) ===== -->
+  <div id="sheet" class="sheet-backdrop" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <button id="sheetCancel" class="text-btn" type="button">Cancelar</button>
+        <h2 id="sheetTitle">Nuevo evento</h2>
+        <button id="sheetSave" class="text-btn strong" type="button">Guardar</button>
+      </div>
+      <div class="sheet-body">
+        <input id="fTitle" class="title-input" type="text" maxlength="120" placeholder="¿Qué pasó o qué viene?" enterkeyhint="done">
+        <div id="fCats" class="cats"></div>
+        <div class="row2">
+          <label class="field"><span>Día</span><input id="fDate" type="date"></label>
+          <label class="field"><span>Hora (opcional)</span><input id="fTime" type="time"></label>
+        </div>
+        <label class="field"><span>Notas</span><textarea id="fNotes" rows="3" maxlength="4000" placeholder="Detalles, lo que dijo, cómo le fue…"></textarea></label>
+
+        <div class="field"><span>Fotos</span></div>
+        <div id="fPhotos" class="photo-strip"></div>
+        <div class="photo-buttons">
+          <label class="btn soft"><input id="fCamera" type="file" accept="image/*" capture="environment" hidden>📷 Sacar foto</label>
+          <label class="btn soft"><input id="fGallery" type="file" accept="image/*" multiple hidden>🖼️ Elegir de la galería</label>
+        </div>
+
+        <label class="toggle">
+          <input id="fYearly" type="checkbox">
+          <span class="toggle-ui"></span>
+          <span>Repetir todos los años <small class="muted">(cumpleaños, aniversarios)</small></span>
+        </label>
+
+        <p id="fMeta" class="meta"></p>
+        <button id="sheetDelete" class="btn danger" type="button" hidden>Eliminar evento</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Visor de fotos ===== -->
+  <div id="viewer" class="viewer" hidden>
+    <button id="viewerClose" class="viewer-close" type="button" aria-label="Cerrar">✕</button>
+    <img id="viewerImg" alt="">
+    <div id="viewerCaption" class="viewer-caption"></div>
+  </div>
+
+  <!-- ===== Menú ===== -->
+  <div id="menu" class="sheet-backdrop" hidden>
+    <div class="sheet menu-sheet">
+      <div class="sheet-handle"></div>
+      <button id="switchUser" class="menu-item" type="button">Cambiar de usuario</button>
+      <button id="installHelp" class="menu-item" type="button">Cómo instalar en el celular</button>
+      <button id="menuClose" class="menu-item muted" type="button">Cerrar</button>
+    </div>
+  </div>
+
+  <div id="busy" class="busy" hidden><div class="spinner"></div><div id="busyText">Guardando…</div></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
