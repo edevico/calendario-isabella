@@ -6,6 +6,7 @@
   <meta name="robots" content="noindex, nofollow">
   <title>Calendario de Isabella</title>
   <meta name="theme-color" content="#e8737f">
+  <meta name="color-scheme" content="light">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -120,10 +121,26 @@
       <div class="sheet-body">
         <input id="fTitle" class="title-input" type="text" maxlength="120" placeholder="¿Qué pasó o qué viene?" enterkeyhint="done">
         <div id="fCats" class="cats"></div>
-        <div class="row2">
-          <label class="field"><span>Día</span><input id="fDate" type="date"></label>
-          <label class="field"><span>Hora (opcional)</span><input id="fTime" type="time"></label>
+        <div class="when-box">
+          <div class="row2">
+            <label class="field"><span id="fDateLabel">Día</span><input id="fDate" type="date"></label>
+            <label class="field" id="fEndWrap" hidden><span>Hasta</span><input id="fEnd" type="date"></label>
+          </div>
+          <div class="seg" role="group" aria-label="Horario">
+            <button type="button" id="segAllDay" class="seg-btn on">☀️ Todo el día</button>
+            <button type="button" id="segTime" class="seg-btn">🕒 A una hora</button>
+          </div>
+          <label class="field" id="fTimeWrap" hidden><span>Hora</span><input id="fTime" type="time"></label>
+          <label class="toggle small">
+            <input id="fMulti" type="checkbox">
+            <span class="toggle-ui"></span>
+            <span>Varios días <small class="muted">(vacaciones, viajes)</small></span>
+          </label>
         </div>
+
+        <div class="field"><span>🔔 Avisarnos</span></div>
+        <div id="fRemind" class="cats"></div>
+        <p class="hint">El aviso llega como notificación de Google Calendar (calendario "Isabella").</p>
         <label class="field"><span>Notas</span><textarea id="fNotes" rows="3" maxlength="4000" placeholder="Detalles, lo que dijo, cómo le fue…"></textarea></label>
 
         <div class="field"><span>Fotos</span></div>

@@ -3,7 +3,7 @@
   'use strict';
 
   const CFG = window.CAL_CONFIG || {};
-  const DEMO = !CFG.API_URL;
+  const DEMO = !CFG.API_URL || new URLSearchParams(location.search).has('demo');
   const USERS = CFG.USERS || ['Enzo', 'Coni'];
 
   const CATS = [
@@ -144,11 +144,39 @@
   }
 
   /* ================= Eventos ================= */
-  function occursOn(e, ds) {
-    if (e.date === ds) return true;
-    return e.yearly && e.date < ds && e.date.slice(5) === ds.slice(5);
+  const REMINDERS = [
+    { v: '', label: 'Sin aviso' },
+    { v: '60', label: '1 hora antes', timedOnly: true },
+    { v: '1440', label: '1 día antes' },
+    { v: '10080', label: '1 semana antes' }
+  ];
+  const addDays = (s, n) => { const d = parseDate(s); d.setDate(d.getDate() + n); return ymd(d); };
+  const daysBetween = (a, b) => Math.round((parseDate(b) - parseDate(a)) / 86400000);
+  const lastDay = (e) => (e.endDate && e.endDate > e.date ? e.endDate : e.date);
+  const isPeriod = (e) => lastDay(e) !== e.date;
+
+  // Fecha de inicio de la ocurrencia que cubre el día ds (o null si no ocurre ese día)
+  function occurrenceStart(e, ds) {
+    const end = lastDay(e);
+    if (ds >= e.date && ds <= end) return e.date;
+    if (!e.yearly || ds < e.date) return null;
+    const len = daysBetween(e.date, end);
+    const y = +ds.slice(0, 4);
+    for (const yy of [y, y - 1]) {
+      const s = ymd(parseDate(yy + e.date.slice(4)));
+      if (s < e.date) continue;
+      if (ds >= s && ds <= addDays(s, len)) return s;
+    }
+    return null;
   }
-  const sortEv = (a, b) => (a.time || '99').localeCompare(b.time || '99') || a.title.localeCompare(b.title);
+  function occursOn(e, ds) { return occurrenceStart(e, ds) !== null; }
+  function rangeText(e, start) {
+    const end = addDays(start, daysBetween(e.date, lastDay(e)));
+    const a = parseDate(start), b = parseDate(end);
+    const left = a.getMonth() === b.getMonth() ? `${a.getDate()}` : `${a.getDate()} ${MONTHS[a.getMonth()].slice(0, 3)}`;
+    return `${left} – ${b.getDate()} ${MONTHS[b.getMonth()].slice(0, 3)}`;
+  }
+  const sortEv = (a, b) => (isPeriod(b) - isPeriod(a)) || (a.time || '').localeCompare(b.time || '') || a.title.localeCompare(b.title);
   function eventsOn(ds) { return state.events.filter((e) => occursOn(e, ds)).sort(sortEv); }
   function yearsSince(e, ds) { return parseDate(ds).getFullYear() - parseDate(e.date).getFullYear(); }
 
@@ -188,7 +216,16 @@
       b.type = 'button';
       b.className = 'cell' + (ds === today ? ' today' : '') + (ds === state.selected ? ' selected' : '');
       b.setAttribute('aria-label', `${d} de ${MONTHS[m]}${evs.length ? `, ${evs.length} evento${evs.length > 1 ? 's' : ''}` : ''}`);
-      b.innerHTML = `<span class="num">${d}</span>` + (evs.length ? `<span class="dots">${evs.slice(0, 3).map((e) => `<span class="dot" style="background:${(CAT[e.category] || CAT.otro).color}"></span>`).join('')}</span>` : '');
+      const periods = evs.filter(isPeriod).slice(0, 2);
+      const singles = evs.filter((e) => !isPeriod(e));
+      const bars = periods.map((e) => {
+        const s = occurrenceStart(e, ds);
+        const end = addDays(s, daysBetween(e.date, lastDay(e)));
+        return `<span class="bar${ds === s ? ' s' : ''}${ds === end ? ' e' : ''}" style="background:${(CAT[e.category] || CAT.otro).color}"></span>`;
+      }).join('');
+      b.innerHTML = `<span class="num">${d}</span>` +
+        (singles.length ? `<span class="dots">${singles.slice(0, 3).map((e) => `<span class="dot" style="background:${(CAT[e.category] || CAT.otro).color}"></span>`).join('')}</span>` : '<span class="dots"></span>') +
+        (bars ? `<span class="bars">${bars}</span>` : '');
       const withPhoto = evs.find((e) => e.photos && e.photos.length);
       if (withPhoto) {
         b.classList.add('photo');
@@ -208,8 +245,16 @@
     const card = document.createElement('button');
     card.type = 'button'; card.className = 'card';
     card.style.setProperty('--cat', c.color);
-    const yrs = e.yearly && ds && yearsSince(e, ds) > 0 ? ` · ${yearsSince(e, ds)} año${yearsSince(e, ds) > 1 ? 's' : ''}` : '';
-    const sub = [e.time || null, c.name + yrs, e.updatedBy || e.createdBy ? `por ${e.updatedBy || e.createdBy}` : null].filter(Boolean).join(' · ');
+    const start = ds ? (occurrenceStart(e, ds) || ds) : e.date;
+    const n = yearsSince(e, start);
+    const yrs = e.yearly && n > 0 ? ` · ${n} año${n > 1 ? 's' : ''}` : '';
+    let when = e.time ? e.time : 'Todo el día';
+    if (isPeriod(e)) {
+      const total = daysBetween(e.date, lastDay(e)) + 1;
+      when = `📆 ${rangeText(e, start)}` + (!showDate && ds ? ` · día ${daysBetween(start, ds) + 1} de ${total}` : ` · ${total} días`);
+    }
+    const bell = e.remind ? ' 🔔' : '';
+    const sub = [when + bell, c.name + yrs, e.updatedBy || e.createdBy ? `por ${e.updatedBy || e.createdBy}` : null].filter(Boolean).join(' · ');
     card.innerHTML = `
       <div class="card-emoji">${c.emoji}</div>
       <div class="card-main">
@@ -273,14 +318,22 @@
     const horizon = new Date(); horizon.setFullYear(horizon.getFullYear() + 1);
     const thisYear = new Date().getFullYear();
     state.events.forEach((e) => {
+      const len = daysBetween(e.date, lastDay(e));
       if (e.yearly) {
-        [thisYear, thisYear + 1].forEach((yy) => { const ds = `${yy}${e.date.slice(4)}`; if (ds >= e.date) occ.push({ e, ds }); });
-        if (e.date < today) occ.push({ e, ds: e.date, origin: true });
-      } else occ.push({ e, ds: e.date });
+        [thisYear - 1, thisYear, thisYear + 1].forEach((yy) => {
+          const ds = ymd(parseDate(`${yy}${e.date.slice(4)}`));
+          if (ds >= e.date) occ.push({ e, ds, end: addDays(ds, len) });
+        });
+        occ.push({ e, ds: e.date, end: addDays(e.date, len), origin: true });
+      } else occ.push({ e, ds: e.date, end: lastDay(e) });
     });
-    const up = occ.filter((o) => o.ds >= today && o.ds <= ymd(horizon) && !o.origin).sort((a, b) => a.ds.localeCompare(b.ds) || sortEv(a.e, b.e)).slice(0, 30);
+    const upSeen = new Set();
+    const up = occ.filter((o) => !o.origin && o.end >= today && o.ds <= ymd(horizon))
+      .sort((a, b) => a.ds.localeCompare(b.ds) || sortEv(a.e, b.e))
+      .filter((o) => { const k = o.e.id + o.ds; if (upSeen.has(k)) return false; upSeen.add(k); return true; })
+      .slice(0, 30);
     const seen = new Set();
-    const past = occ.filter((o) => o.ds < today && (!o.e.yearly || o.origin))
+    const past = occ.filter((o) => o.end < today && (!o.e.yearly || o.origin))
       .sort((a, b) => b.ds.localeCompare(a.ds) || (b.e.updatedAt || '').localeCompare(a.e.updatedAt || ''))
       .filter((o) => !seen.has(o.e.id) && seen.add(o.e.id)).slice(0, 30);
     const fill = (el, arr, msg) => {
@@ -320,11 +373,16 @@
   function openEditor(ev, ds) {
     draft = ev
       ? { ...ev, photos: [...(ev.photos || [])], newPhotos: [] }
-      : { id: null, date: ds || state.selected, time: '', title: '', notes: '', category: 'hito', yearly: false, photos: [], newPhotos: [] };
+      : { id: null, date: ds || state.selected, endDate: '', time: '', title: '', notes: '', category: 'hito', yearly: false, remind: '1440', photos: [], newPhotos: [] };
+    draft.remind = draft.remind || '';
+    draft.allDay = !draft.time;
     $('#sheetTitle').textContent = ev ? 'Editar evento' : 'Nuevo evento';
     $('#fTitle').value = draft.title;
     $('#fDate').value = draft.date;
     $('#fTime').value = draft.time || '';
+    $('#fMulti').checked = isPeriod(draft);
+    $('#fEnd').value = isPeriod(draft) ? draft.endDate : addDays(draft.date, 1);
+    syncWhen();
     $('#fNotes').value = draft.notes || '';
     $('#fYearly').checked = !!draft.yearly;
     $('#sheetDelete').hidden = !ev;
@@ -338,6 +396,32 @@
     if (!ev) setTimeout(() => $('#fTitle').focus(), 280);
   }
   function closeEditor() { $('#sheet').hidden = true; document.body.style.overflow = ''; draft = null; }
+
+  // Muestra/oculta hora, "hasta" y las opciones de aviso según lo elegido
+  function syncWhen() {
+    if (!draft) return;
+    const multi = $('#fMulti').checked;
+    $('#segAllDay').classList.toggle('on', draft.allDay);
+    $('#segTime').classList.toggle('on', !draft.allDay);
+    $('#fTimeWrap').hidden = draft.allDay;
+    $('#fEndWrap').hidden = !multi;
+    $('#fDateLabel').textContent = multi ? 'Desde' : 'Día';
+    if (multi && (!$('#fEnd').value || $('#fEnd').value <= $('#fDate').value)) $('#fEnd').value = addDays($('#fDate').value || todayStr(), 1);
+    if (draft.allDay && draft.remind === '60') draft.remind = '1440';
+    renderRemind();
+  }
+
+  function renderRemind() {
+    const wrap = $('#fRemind'); wrap.innerHTML = '';
+    REMINDERS.filter((r) => !(r.timedOnly && draft.allDay)).forEach((r) => {
+      const b = document.createElement('button'); b.type = 'button';
+      b.className = 'cat' + (draft.remind === r.v ? ' on' : '');
+      b.style.setProperty('--c', '#e8737f');
+      b.textContent = r.label;
+      b.addEventListener('click', () => { draft.remind = r.v; renderRemind(); });
+      wrap.appendChild(b);
+    });
+  }
 
   function renderCats() {
     const wrap = $('#fCats'); wrap.innerHTML = '';
@@ -391,9 +475,17 @@
     if (!title) { toast('Escribe un título'); $('#fTitle').focus(); return; }
     const date = $('#fDate').value;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { toast('Elige un día'); return; }
+    let endDate = '';
+    if ($('#fMulti').checked) {
+      endDate = $('#fEnd').value;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate) || endDate <= date) { toast('El "hasta" debe ser después del primer día'); return; }
+    }
+    const time = draft.allDay ? '' : $('#fTime').value;
+    if (!draft.allDay && !time) { toast('Elige la hora o marca "Todo el día"'); return; }
     const ev = {
-      id: draft.id, date, time: $('#fTime').value || '', title,
+      id: draft.id, date, endDate, time, title,
       notes: $('#fNotes').value.trim(), category: draft.category, yearly: $('#fYearly').checked,
+      remind: draft.remind || '',
       photos: [...draft.photos]
     };
     try {
@@ -537,6 +629,14 @@
     $('#sheetSave').addEventListener('click', saveDraft);
     $('#sheetDelete').addEventListener('click', deleteDraft);
     $('#sheet').addEventListener('click', (e) => { if (e.target.id === 'sheet') closeEditor(); });
+    $('#segAllDay').addEventListener('click', () => { draft.allDay = true; syncWhen(); });
+    $('#segTime').addEventListener('click', () => {
+      draft.allDay = false; syncWhen();
+      if (!$('#fTime').value) $('#fTime').value = '09:00';
+      try { $('#fTime').showPicker(); } catch { $('#fTime').focus(); }
+    });
+    $('#fMulti').addEventListener('change', syncWhen);
+    $('#fDate').addEventListener('change', syncWhen);
     $('#fTitle').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
     $('#fCamera').addEventListener('change', (e) => { addFiles([...e.target.files]); e.target.value = ''; });
     $('#fGallery').addEventListener('change', (e) => { addFiles([...e.target.files]); e.target.value = ''; });

@@ -1,5 +1,5 @@
 // Service worker: guarda la app en el teléfono para que abra rápido y sin internet.
-const CACHE = 'cal-isabella-v2';
+const CACHE = 'cal-isabella-v3';
 const SHELL = [
   './', './index.html', './style.css', './app.js', './config.js', './manifest.webmanifest',
   './img/icon-192.png', './img/icon-512.png', './img/apple-touch-icon.png', './img/favicon.png',
